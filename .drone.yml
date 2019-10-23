@@ -1,61 +1,33 @@
-kind: pipeline
-name: pipeline-example-maven
+workspace:
+  base: /go
+  path: src/github.com/bysir-zl/gokit_start
 
-steps:
-  - name: Maven编译
-    image: maven:3-jdk-7
-    volumes:
-      - name: cache
-        path: /root/.m2
+pipeline:
+  build:
+    image: golang:1.9
     commands:
-      - mvn clean install
+      - pwd
+      - go env
+      - go version
+      - go build
 
-  - name: 构建镜像
+  publish:
     image: plugins/docker
-    volumes:
-      - name: docker
-        path: /var/run/docker.sock
-    settings:
-      username:
-        from_secret: docker_user
-      password:
-        from_secret: docker_pass
-      repo: {your-repo}
-      registry: {your-registry}
-      tags: ${DRONE_BUILD_NUMBER}
+    registry: https://index.docker.io/v1/ # 仓库
+    repo: bysir/golang_base # docker仓库地址
+    # mirror: https://docker.mirrors.ustc.edu.cn
+    # 需要使用drone cli添加secrets: http://docs.drone.io/manage-secrets/
+    secrets: [ docker_username, docker_password ]
+    tags:
+      - latest
 
-  - name: Kubernetes 部署
-    image: guoxudongdocker/kubectl:v1.14.1
-    volumes:
-      - name: kube
-        path: /root/.kube
-    commands:
-      - sed -i "s/#Tag/${DRONE_BUILD_NUMBER}/g" deployment.yaml
-      - kubectl apply -f deployment.yaml
-
-  - name: 钉钉通知
-    image: guoxudongdocker/drone-dingtalk
-    settings:
-      token:
-        from_secret: dingding
-      type: markdown
-      message_color: true
-      message_pic: true
-      sha_link: true
-    when:
-      status: [failure, success]
-
-volumes:
-  - name: cache
-    host:
-      path: /tmp/cache/.m2
-  - name: kube
-    host:
-      path: /tmp/cache/.kube/.test_kube
-  - name: docker
-    host:
-      path: /var/run/docker.sock
-
-trigger:
-  branch:
-    - master
+  deploy:
+    image: appleboy/drone-ssh
+    host: 59.110.138.14
+    username: root
+    port: 22
+    password: ws@2019
+    script:
+      - cd /root/app
+      - docker-compose pull bysir/golang_base
+      - docker-compose up
